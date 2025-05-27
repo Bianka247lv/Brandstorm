@@ -6,7 +6,8 @@ import json
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'brandstorm-secret-key'
-socketio = SocketIO(app)
+socketio = SocketIO(app, cors_allowed_origins="*")
+
 
 # Initialize database
 def init_db():
@@ -256,4 +257,5 @@ def handle_chat_message(data):
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
-    socketio.run(app, host='0.0.0.0', port=port, allow_unsafe_werkzeug=True, cors_allowed_origins="*")
+    socketio.run(app, host='0.0.0.0', port=port, allow_unsafe_werkzeug=True)
+
