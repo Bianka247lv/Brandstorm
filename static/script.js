@@ -26,6 +26,8 @@ document.addEventListener("DOMContentLoaded", function() {
             suggestions.forEach(suggestion => {
                 addSuggestionToDOM(suggestion);
             });
+            // Update leading name after loading suggestions
+            updateLeadingName();
         });
     
     // Load existing chat messages
@@ -201,10 +203,14 @@ document.addEventListener("DOMContentLoaded", function() {
     // Socket.io event handlers
     socket.on("new_suggestion", function(suggestion) {
         addSuggestionToDOM(suggestion);
+        // Update leading name when new suggestion is added
+        updateLeadingName();
     });
     
     socket.on("vote_update", function(suggestion) {
         updateSuggestionInDOM(suggestion);
+        // Update leading name when votes change
+        updateLeadingName();
     });
     
     socket.on("suggestion_edited", function(suggestion) {
@@ -216,6 +222,8 @@ document.addEventListener("DOMContentLoaded", function() {
         if (nameItem) {
             nameItem.remove();
         }
+        // Update leading name when suggestion is deleted
+        updateLeadingName();
     });
     
     socket.on("new_chat_message", function(message) {
@@ -315,5 +323,23 @@ document.addEventListener("DOMContentLoaded", function() {
         messageDiv.appendChild(messageText);
         
         chatMessagesDiv.appendChild(messageDiv);
+    }
+    
+    // Function to update the leading name ticker
+    function updateLeadingName() {
+        fetch('/api/suggestions')
+            .then(response => response.json())
+            .then(suggestions => {
+                if (suggestions.length === 0) {
+                    document.getElementById('leading-name').textContent = 'None yet';
+                    return;
+                }
+                
+                // Sort by upvotes (highest first)
+                suggestions.sort((a, b) => b.upvotes - a.upvotes);
+                const leadingName = suggestions[0];
+                document.getElementById('leading-name').textContent = 
+                    `"${leadingName.name}" (${leadingName.upvotes} upvotes)`;
+            });
     }
 });
