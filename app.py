@@ -184,3 +184,14 @@ def serve_static(path):
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     socketio.run(app, host='0.0.0.0', port=port, allow_unsafe_werkzeug=True)
+    @app.route('/api/chat/clear', methods=['POST'])
+def clear_chat_messages():
+    conn = sqlite3.connect('app.db')
+    c = conn.cursor()
+    c.execute("DELETE FROM chat_messages")
+    conn.commit()
+    conn.close()
+    
+    socketio.emit('chat_cleared')
+    return jsonify({'success': True})
+
