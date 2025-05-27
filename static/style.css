@@ -30,6 +30,26 @@ h1 {
     margin-bottom: 30px;
 }
 
+/* Leading Name Ticker */
+.leading-ticker {
+    background-color: #6a0dad;
+    color: white;
+    text-align: center;
+    padding: 10px;
+    margin-bottom: 20px;
+    border-radius: 6px;
+    font-weight: bold;
+    font-size: 1.2em;
+}
+
+.ticker-label {
+    margin-right: 10px;
+}
+
+#leading-name {
+    color: #ff6600;
+}
+
 .main-content {
     display: grid;
     grid-template-columns: 1fr 1fr;
@@ -104,9 +124,12 @@ input[type="text"] {
     margin-bottom: 15px;
 }
 
+/* Larger, bold name suggestions */
 .name-title {
     font-weight: bold;
-    font-size: 1.3em;
+    font-size: 1.5em;
+    color: #6a0dad;
+    margin-bottom: 5px;
 }
 
 .name-user {
@@ -122,6 +145,18 @@ input[type="text"] {
     margin-right: 10px;
     padding: 8px 15px;
     font-size: 0.9em;
+}
+
+/* Smaller edit/delete buttons */
+.edit-btn, .delete-btn {
+    background-color: #6a0dad;
+    font-size: 0.8em;
+    padding: 6px 12px;
+    margin-right: 5px;
+}
+
+.delete-btn {
+    background-color: #d9534f;
 }
 
 .vote-count {
@@ -160,14 +195,6 @@ input[type="text"] {
 .chat-input input {
     flex-grow: 1;
     margin-bottom: 0;
-}
-
-.edit-btn {
-    background-color: #6a0dad;
-}
-
-.delete-btn {
-    background-color: #d9534f;
 }
 
 /* Clear Chat Button Styling */
