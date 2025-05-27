@@ -7,6 +7,7 @@ document.addEventListener("DOMContentLoaded", function() {
     const chatMessageInput = document.getElementById('chat-message');
     const sendMessageBtn = document.getElementById('send-message');
     const chatMessagesDiv = document.getElementById('chat-messages');
+    const clearChatBtn = document.getElementById('clear-chat');
     
     let username = localStorage.getItem('username') || '';
     if (username) {
@@ -46,6 +47,18 @@ document.addEventListener("DOMContentLoaded", function() {
     nameInput.addEventListener('keypress', function(e) {
         if (e.key === 'Enter') {
             submitNameSuggestion();
+        }
+    });
+    
+    // Clear Chat button event listener
+    clearChatBtn.addEventListener('click', function() {
+        if (confirm('Are you sure you want to clear all chat messages?')) {
+            fetch('/api/chat/clear', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            });
         }
     });
     
@@ -208,6 +221,11 @@ document.addEventListener("DOMContentLoaded", function() {
     socket.on("new_chat_message", function(message) {
         addChatMessageToDOM(message);
         chatMessagesDiv.scrollTop = chatMessagesDiv.scrollHeight;
+    });
+    
+    // Add handler for chat cleared event
+    socket.on("chat_cleared", function() {
+        chatMessagesDiv.innerHTML = '';
     });
     
     function addSuggestionToDOM(suggestion) {
