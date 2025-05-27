@@ -30,18 +30,16 @@
                 <div id="names-container"></div>
             </div>
             
-            <div class="chat-section">
-                <h2><i class="fas fa-comments"></i> Group Chat</h2>
-                <div id="chat-messages" class="chat-messages"></div>
-                <div class="chat-input">
-                    <input type="text" id="chat-message" placeholder="Type your message...">
-                    <button id="send-message" class="btn">Send</button>
-                </div>
-            </div>
-        </div>
+          <div class="chat-section">
+    <h2><i class="fas fa-comments"></i> Group Chat</h2>
+    <button id="clear-chat" class="btn clear-btn"><i class="fas fa-trash"></i> Clear Chat</button>
+    <div id="chat-messages" class="chat-messages"></div>
+    <div class="chat-input">
+        <input type="text" id="chat-message" placeholder="Type your message...">
+        <button id="send-message" class="btn">Send</button>
     </div>
-    
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+</div>
+ <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
     <script src="/static/script.js"></script>
 </body>
 </html>
