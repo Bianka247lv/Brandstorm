@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BrandStorm</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1><i class="fas fa-bolt"></i> BrandStorm</h1>
+            <p class="tagline">Collaborative Product Naming Platform for Teams</p>
+        </header>
+        
+        <div class="main-content">
+            <div class="user-input">
+                <input type="text" id="username" placeholder="Enter your name">
+            </div>
+            
+            <div class="name-suggestion">
+                <h2><i class="fas fa-lightbulb"></i> Suggest a Name</h2>
+                <input type="text" id="name-input" placeholder="Enter a product name suggestion">
+                <button id="submit-name" class="btn">Submit</button>
+            </div>
+            
+            <div class="name-list">
+                <h2><i class="fas fa-list"></i> Suggested Names</h2>
+                <div id="names-container"></div>
+            </div>
+            
+            <div class="chat-section">
+                <h2><i class="fas fa-comments"></i> Group Chat</h2>
+                <div id="chat-messages" class="chat-messages"></div>
+                <div class="chat-input">
+                    <input type="text" id="chat-message" placeholder="Type your message...">
+                    <button id="send-message" class="btn">Send</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+    <script src="/static/script.js"></script>
+</body>
+</html>
