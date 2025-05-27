@@ -1,24 +1,43 @@
 from flask import Flask, render_template, request, jsonify
 from flask_socketio import SocketIO
-import os
 import sqlite3
+import os
 import json
-from datetime import datetime
 
 app = Flask(__name__)
-app.config['SECRET_KEY'] = 'brandstorm_secret_key'
+app.config['SECRET_KEY'] = 'brandstorm-secret-key'
 socketio = SocketIO(app)
 
 # Initialize database
 def init_db():
     conn = sqlite3.connect('app.db')
     c = conn.cursor()
-    c.execute('''CREATE TABLE IF NOT EXISTS suggestions
-                 (id INTEGER PRIMARY KEY, name TEXT, user TEXT, upvotes INTEGER, downvotes INTEGER, timestamp TEXT)''')
-    c.execute('''CREATE TABLE IF NOT EXISTS votes
-                 (id INTEGER PRIMARY KEY, suggestion_id INTEGER, user TEXT, vote TEXT)''')
-    c.execute('''CREATE TABLE IF NOT EXISTS chat_messages
-                 (id INTEGER PRIMARY KEY, user TEXT, message TEXT, timestamp TEXT)''')
+    c.execute('''
+    CREATE TABLE IF NOT EXISTS suggestions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        user TEXT NOT NULL,
+        upvotes INTEGER DEFAULT 0,
+        downvotes INTEGER DEFAULT 0
+    )
+    ''')
+    c.execute('''
+    CREATE TABLE IF NOT EXISTS votes (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        suggestion_id INTEGER,
+        user TEXT NOT NULL,
+        vote TEXT NOT NULL,
+        FOREIGN KEY (suggestion_id) REFERENCES suggestions (id)
+    )
+    ''')
+    c.execute('''
+    CREATE TABLE IF NOT EXISTS chat_messages (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user TEXT NOT NULL,
+        message TEXT NOT NULL,
+        timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+    ''')
     conn.commit()
     conn.close()
 
@@ -31,31 +50,35 @@ def index():
 @app.route('/api/suggestions', methods=['GET'])
 def get_suggestions():
     conn = sqlite3.connect('app.db')
-    conn.row_factory = sqlite3.Row
     c = conn.cursor()
-    c.execute("SELECT * FROM suggestions ORDER BY timestamp DESC")
-    suggestions = [dict(row) for row in c.fetchall()]
+    c.execute("SELECT id, name, user, upvotes, downvotes FROM suggestions ORDER BY id DESC")
+    suggestions = [{'id': row[0], 'name': row[1], 'user': row[2], 'upvotes': row[3], 'downvotes': row[4]} for row in c.fetchall()]
     conn.close()
     return jsonify(suggestions)
 
 @app.route('/api/suggestions', methods=['POST'])
 def add_suggestion():
     data = request.json
+    name = data.get('name')
+    user = data.get('user')
+    
+    if not name or not user:
+        return jsonify({'error': 'Name and user are required'}), 400
+    
     conn = sqlite3.connect('app.db')
     c = conn.cursor()
-    c.execute("INSERT INTO suggestions (name, user, upvotes, downvotes, timestamp) VALUES (?, ?, ?, ?, ?)",
-              (data['name'], data['user'], 0, 0, datetime.now().isoformat()))
+    c.execute("INSERT INTO suggestions (name, user) VALUES (?, ?)", (name, user))
     suggestion_id = c.lastrowid
     conn.commit()
     conn.close()
     
-    # Get the newly created suggestion
-    conn = sqlite3.connect('app.db')
-    conn.row_factory = sqlite3.Row
-    c = conn.cursor()
-    c.execute("SELECT * FROM suggestions WHERE id = ?", (suggestion_id,))
-    suggestion = dict(c.fetchone())
-    conn.close()
+    suggestion = {
+        'id': suggestion_id,
+        'name': name,
+        'user': user,
+        'upvotes': 0,
+        'downvotes': 0
+    }
     
     socketio.emit('new_suggestion', suggestion)
     return jsonify(suggestion)
@@ -63,50 +86,60 @@ def add_suggestion():
 @app.route('/api/suggestions/<int:suggestion_id>/vote', methods=['POST'])
 def vote_suggestion(suggestion_id):
     data = request.json
+    vote_type = data.get('vote')
+    user = data.get('user')
+    
+    if not vote_type or not user:
+        return jsonify({'error': 'Vote type and user are required'}), 400
+    
+    if vote_type not in ['up', 'down']:
+        return jsonify({'error': 'Vote type must be "up" or "down"'}), 400
+    
     conn = sqlite3.connect('app.db')
     c = conn.cursor()
     
     # Check if user has already voted
-    c.execute("SELECT vote FROM votes WHERE suggestion_id = ? AND user = ?", (suggestion_id, data['user']))
+    c.execute("SELECT vote FROM votes WHERE suggestion_id = ? AND user = ?", (suggestion_id, user))
     existing_vote = c.fetchone()
     
     if existing_vote:
-        # User has already voted, update their vote
-        old_vote = existing_vote[0]
-        if old_vote != data['vote']:
-            # Change vote
-            c.execute("UPDATE votes SET vote = ? WHERE suggestion_id = ? AND user = ?", 
-                     (data['vote'], suggestion_id, data['user']))
-            
-            # Update suggestion vote counts
-            if old_vote == 'up':
-                c.execute("UPDATE suggestions SET upvotes = upvotes - 1 WHERE id = ?", (suggestion_id,))
+        existing_vote_type = existing_vote[0]
+        if existing_vote_type == vote_type:
+            # User is voting the same way, remove their vote
+            c.execute("DELETE FROM votes WHERE suggestion_id = ? AND user = ?", (suggestion_id, user))
+            vote_value = -1 if vote_type == 'up' else 1
+            vote_column = 'upvotes' if vote_type == 'up' else 'downvotes'
+            c.execute(f"UPDATE suggestions SET {vote_column} = {vote_column} - 1 WHERE id = ?", (suggestion_id,))
+        else:
+            # User is changing their vote
+            c.execute("UPDATE votes SET vote = ? WHERE suggestion_id = ? AND user = ?", (vote_type, suggestion_id, user))
+            if vote_type == 'up':
+                c.execute("UPDATE suggestions SET upvotes = upvotes + 1, downvotes = downvotes - 1 WHERE id = ?", (suggestion_id,))
             else:
-                c.execute("UPDATE suggestions SET downvotes = downvotes - 1 WHERE id = ?", (suggestion_id,))
-                
-            if data['vote'] == 'up':
-                c.execute("UPDATE suggestions SET upvotes = upvotes + 1 WHERE id = ?", (suggestion_id,))
-            else:
-                c.execute("UPDATE suggestions SET downvotes = downvotes + 1 WHERE id = ?", (suggestion_id,))
+                c.execute("UPDATE suggestions SET upvotes = upvotes - 1, downvotes = downvotes + 1 WHERE id = ?", (suggestion_id,))
     else:
         # New vote
-        c.execute("INSERT INTO votes (suggestion_id, user, vote) VALUES (?, ?, ?)", 
-                 (suggestion_id, data['user'], data['vote']))
-        
-        # Update suggestion vote count
-        if data['vote'] == 'up':
-            c.execute("UPDATE suggestions SET upvotes = upvotes + 1 WHERE id = ?", (suggestion_id,))
-        else:
-            c.execute("UPDATE suggestions SET downvotes = downvotes + 1 WHERE id = ?", (suggestion_id,))
+        c.execute("INSERT INTO votes (suggestion_id, user, vote) VALUES (?, ?, ?)", (suggestion_id, user, vote_type))
+        vote_column = 'upvotes' if vote_type == 'up' else 'downvotes'
+        c.execute(f"UPDATE suggestions SET {vote_column} = {vote_column} + 1 WHERE id = ?", (suggestion_id,))
     
     conn.commit()
     
     # Get updated suggestion
-    conn.row_factory = sqlite3.Row
-    c = conn.cursor()
-    c.execute("SELECT * FROM suggestions WHERE id = ?", (suggestion_id,))
-    suggestion = dict(c.fetchone())
+    c.execute("SELECT id, name, user, upvotes, downvotes FROM suggestions WHERE id = ?", (suggestion_id,))
+    row = c.fetchone()
     conn.close()
+    
+    if not row:
+        return jsonify({'error': 'Suggestion not found'}), 404
+    
+    suggestion = {
+        'id': row[0],
+        'name': row[1],
+        'user': row[2],
+        'upvotes': row[3],
+        'downvotes': row[4]
+    }
     
     socketio.emit('vote_update', suggestion)
     return jsonify(suggestion)
@@ -114,18 +147,42 @@ def vote_suggestion(suggestion_id):
 @app.route('/api/suggestions/<int:suggestion_id>', methods=['PUT'])
 def edit_suggestion(suggestion_id):
     data = request.json
+    name = data.get('name')
+    user = data.get('user')
+    
+    if not name or not user:
+        return jsonify({'error': 'Name and user are required'}), 400
+    
     conn = sqlite3.connect('app.db')
     c = conn.cursor()
-    c.execute("UPDATE suggestions SET name = ? WHERE id = ? AND user = ?", 
-             (data['name'], suggestion_id, data['user']))
+    
+    # Check if suggestion exists and belongs to user
+    c.execute("SELECT user FROM suggestions WHERE id = ?", (suggestion_id,))
+    row = c.fetchone()
+    
+    if not row:
+        conn.close()
+        return jsonify({'error': 'Suggestion not found'}), 404
+    
+    if row[0] != user:
+        conn.close()
+        return jsonify({'error': 'You can only edit your own suggestions'}), 403
+    
+    c.execute("UPDATE suggestions SET name = ? WHERE id = ?", (name, suggestion_id))
     conn.commit()
     
     # Get updated suggestion
-    conn.row_factory = sqlite3.Row
-    c = conn.cursor()
-    c.execute("SELECT * FROM suggestions WHERE id = ?", (suggestion_id,))
-    suggestion = dict(c.fetchone())
+    c.execute("SELECT id, name, user, upvotes, downvotes FROM suggestions WHERE id = ?", (suggestion_id,))
+    row = c.fetchone()
     conn.close()
+    
+    suggestion = {
+        'id': row[0],
+        'name': row[1],
+        'user': row[2],
+        'upvotes': row[3],
+        'downvotes': row[4]
+    }
     
     socketio.emit('suggestion_edited', suggestion)
     return jsonify(suggestion)
@@ -133,10 +190,28 @@ def edit_suggestion(suggestion_id):
 @app.route('/api/suggestions/<int:suggestion_id>', methods=['DELETE'])
 def delete_suggestion(suggestion_id):
     data = request.json
+    user = data.get('user')
+    
+    if not user:
+        return jsonify({'error': 'User is required'}), 400
+    
     conn = sqlite3.connect('app.db')
     c = conn.cursor()
-    c.execute("DELETE FROM suggestions WHERE id = ? AND user = ?", (suggestion_id, data['user']))
+    
+    # Check if suggestion exists and belongs to user
+    c.execute("SELECT user FROM suggestions WHERE id = ?", (suggestion_id,))
+    row = c.fetchone()
+    
+    if not row:
+        conn.close()
+        return jsonify({'error': 'Suggestion not found'}), 404
+    
+    if row[0] != user:
+        conn.close()
+        return jsonify({'error': 'You can only delete your own suggestions'}), 403
+    
     c.execute("DELETE FROM votes WHERE suggestion_id = ?", (suggestion_id,))
+    c.execute("DELETE FROM suggestions WHERE id = ?", (suggestion_id,))
     conn.commit()
     conn.close()
     
@@ -146,54 +221,11 @@ def delete_suggestion(suggestion_id):
 @app.route('/api/chat', methods=['GET'])
 def get_chat_messages():
     conn = sqlite3.connect('app.db')
-    conn.row_factory = sqlite3.Row
     c = conn.cursor()
-    c.execute("SELECT * FROM chat_messages ORDER BY timestamp ASC")
-    messages = [dict(row) for row in c.fetchall()]
+    c.execute("SELECT user, message FROM chat_messages ORDER BY id ASC")
+    messages = [{'user': row[0], 'message': row[1]} for row in c.fetchall()]
     conn.close()
     return jsonify(messages)
-
-@socketio.on('chat_message')
-def handle_chat_message(data):
-    conn = sqlite3.connect('app.db')
-    c = conn.cursor()
-    timestamp = datetime.now().isoformat()
-    c.execute("INSERT INTO chat_messages (user, message, timestamp) VALUES (?, ?, ?)",
-              (data['user'], data['message'], timestamp))
-    message_id = c.lastrowid
-    conn.commit()
-    conn.close()
-    
-    message = {
-        'id': message_id,
-        'user': data['user'],
-        'message': data['message'],
-        'timestamp': timestamp
-    }
-    
-    socketio.emit('new_chat_message', message)
-
-@app.route('/templates/<path:path>')
-def serve_template(path):
-    return render_template(path)
-
-@app.route('/static/<path:path>')
-def serve_static(path):
-    return app.send_static_file(path)
-
-if __name__ == '__main__':
-    port = int(os.environ.get('PORT', 5000))
-    socketio.run(app, host='0.0.0.0', port=port, allow_unsafe_werkzeug=True)
-    @app.route('/api/chat/clear', methods=['POST'])
-def clear_chat_messages():
-    conn = sqlite3.connect('app.db')
-    c = conn.cursor()
-    c.execute("DELETE FROM chat_messages")
-    conn.commit()
-    conn.close()
-    
-    socketio.emit('chat_cleared')
-    return jsonify({'success': True})
 
 @app.route('/api/chat/clear', methods=['POST'])
 def clear_chat_messages():
@@ -206,4 +238,22 @@ def clear_chat_messages():
     socketio.emit('chat_cleared')
     return jsonify({'success': True})
 
+@socketio.on('chat_message')
+def handle_chat_message(data):
+    user = data.get('user')
+    message = data.get('message')
+    
+    if not user or not message:
+        return
+    
+    conn = sqlite3.connect('app.db')
+    c = conn.cursor()
+    c.execute("INSERT INTO chat_messages (user, message) VALUES (?, ?)", (user, message))
+    conn.commit()
+    conn.close()
+    
+    socketio.emit('new_chat_message', {'user': user, 'message': message})
 
+if __name__ == '__main__':
+    port = int(os.environ.get('PORT', 5000))
+    socketio.run(app, host='0.0.0.0', port=port, allow_unsafe_werkzeug=True, cors_allowed_origins="*")
