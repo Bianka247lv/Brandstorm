@@ -195,3 +195,15 @@ def clear_chat_messages():
     socketio.emit('chat_cleared')
     return jsonify({'success': True})
 
+@app.route('/api/chat/clear', methods=['POST'])
+def clear_chat_messages():
+    conn = sqlite3.connect('app.db')
+    c = conn.cursor()
+    c.execute("DELETE FROM chat_messages")
+    conn.commit()
+    conn.close()
+    
+    socketio.emit('chat_cleared')
+    return jsonify({'success': True})
+
+
